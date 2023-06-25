@@ -11,6 +11,33 @@
 #define QLEN            5               /* tamanho da fila de clientes  */
 #define MAX_SIZE	80		/* tamanho do buffer */
 
+void menu(){
+    int opcao, limit_users, id_sala;
+    char nome[1000];
+
+    printf("Olá, digite o que você deseja fazer\n");
+    printf("1 - Criar sala virtual\n");
+    printf("2 - Listar participantes de uma sala\n");
+    printf("3 - Entrar em uma sala\n");
+    printf("4 - Criar sala\n");
+
+    scanf("%d", opcao);
+    if(opcao == 1){
+        printf("Digite o nome que deseja para a sala\n");
+        scanf("%s", nome);
+        printf("Agora digite o limite de participantes para cada sala\n");
+        scanf("%d", &limit_users);
+    }
+    else if(opcao == 2){
+        printf("Digite o identificador sala que deseja que sejam listados os participantes\n");
+        scanf("%d", &id_sala);
+    }
+    else if(opcao == 3){
+        printf("Digite o identificador da sala que deseja entrar\n");
+        scanf("%d", &id_sala);
+    }
+}
+
 int main(int argc, char *argv[]) {
    struct sockaddr_in endServ;  /* endereco do servidor   */
    struct sockaddr_in endCli;   /* endereco do cliente    */
@@ -27,6 +54,7 @@ int main(int argc, char *argv[]) {
    if (argc<3) {
 	  printf("Digite IP e Porta para este servidor\n");
 	  exit(1); }
+
    memset((char *)&endServ,0,sizeof(endServ)); 
    endServ.sin_family 		= AF_INET;           	/* familia TCP/IP   */
    endServ.sin_addr.s_addr 	= inet_addr(argv[1]); 	/* endereco IP      */
