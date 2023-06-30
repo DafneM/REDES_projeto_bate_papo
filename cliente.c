@@ -33,7 +33,7 @@ void envia_mensagem(int sd, clienteInfo cliente)
     memset(bufout, 0, sizeof(bufout));
 
     limpa_cmd();
-    fgets(bufout, MAX_SIZE, stdin) != NULL;
+    fgets(bufout, MAX_SIZE, stdin);
 
     substitui_n(bufout);
     if (strlen(bufout) == 0)
@@ -41,7 +41,10 @@ void envia_mensagem(int sd, clienteInfo cliente)
         limpa_cmd();
     }
 
-    send(sd, bufout, MAX_SIZE, 0); /* enviando dados ...  */
+    snprintf(bufout + strlen(bufout), MAX_SIZE - strlen(bufout), ":%d", cliente.roomIndex);
+
+    send(sd, bufout, MAX_SIZE, 0);
+
     if (strcmp(bufout, "FIM") == 0)
     {
         printf("Saindo...\n");
@@ -67,9 +70,7 @@ int main(int argc, char *argv[])
 {
     int sd;
     struct sockaddr_in serverAddr, clientAddr;
-    socklen_t addrLen = sizeof(clientAddr);
-    char nome_usuario[50];
-    clienteInfo clienteInfo;
+    clienteInfo cliente;
     fd_set readfds;
 
     if (argc < 3)
@@ -78,9 +79,13 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    // printf("Digite seu nome de usuário: ");
-    // if (fgets(clienteInfo.nome, 50, stdin) != NULL)
-    //     substitui_n(clienteInfo.nome);
+    printf("Digite o nome ou o índice da sala de destino: ");
+    fgets(cliente.nome, 50, stdin);
+    substitui_n(cliente.nome);
+
+    printf("Digite o índice da sala de destino: ");
+    scanf("%d", &cliente.roomIndex);
+    getchar();
 
     /* configura endereco do servidor */
     serverAddr.sin_family = AF_INET; /* config. socket p. internet*/
@@ -115,7 +120,7 @@ int main(int argc, char *argv[])
         }
         if (FD_ISSET(STDIN_FILENO, &readfds))
         {
-            envia_mensagem(sd, clienteInfo);
+            envia_mensagem(sd, cliente);
         }
         if (FD_ISSET(sd, &readfds))
         {
