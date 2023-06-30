@@ -21,6 +21,17 @@ char messages[MAX_CLIENTS][MAX_MESSAGE_LENGTH];
 fd_set readfds;
 int maxfd;
 
+void substitui_n(char *str) {
+    int len = strlen(str);
+    if (len > 0) {
+        for (int i = len - 1; i >= 0; i--) {
+            if (str[i] == '\n') {
+                str[i] = '\0';
+                break;
+            }
+        }
+    }
+}
 // Function to initialize the client array
 void initClients()
 {
@@ -67,12 +78,12 @@ void removeClient(int clientfd)
 // Function to broadcast a message to all connected clients
 void broadcastMessage(Mensagem *msg, int sender)
 {
-    char new_message[MAX_MESSAGE_LENGTH] = {0};
+    // char new_message[MAX_MESSAGE_LENGTH] = {0};
     if (strlen(msg->mensagem) == 0)
     {
         return;
     }
-    snprintf(new_message, MAX_MESSAGE_LENGTH, "@%s: %s", msg->nome, msg->mensagem);
+    // snprintf(new_message, MAX_MESSAGE_LENGTH, "@%s: %s", msg->nome, msg->mensagem);
 
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
@@ -80,24 +91,32 @@ void broadcastMessage(Mensagem *msg, int sender)
 
         if (clientfd != -1 && clientfd != sender)
         {
-            write(clientfd, new_message, strlen(new_message));
+            write(clientfd, &msg, sizeof(msg));
         }
     }
 }
 void cadastrar_usuario(int sd, char *nome)
 {
+    struct sockaddr_in clientAddr;
+    socklen_t addrLen = sizeof(clientAddr);
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
         if (cliente[i].sd == sd)
         {
+
+            getpeername(cliente[i].sd, (struct sockaddr *)&clientAddr, (socklen_t *)&addrLen);
             strcpy(cliente[i].nome, nome);
+            strcpy(cliente[i].ip, inet_ntoa(clientAddr.sin_addr));
+            printf("Cliente @%s conectado no endereço %s\n", cliente[i].nome, cliente[i].ip);
             break;
         }
     }
-    listar_clientes();
+    // listar_clientes();
 }
 void trataMensagem(int sd, Mensagem *msg)
 {
+    printf("Tratando mensagem...\n");
+    printf("Tipo: %d\n", msg->tipo);
     switch (msg->tipo)
     {
     case CRIAR_SALA:
@@ -108,7 +127,8 @@ void trataMensagem(int sd, Mensagem *msg)
         break;
     case LISTAR_SALAS:
         break;
-    case ENVIAR_MENSAGEM:
+    case LISTAR_USUARIOS:
+        listar_usuarios(sd);
         break;
     case SAIR:
         break;
@@ -121,16 +141,25 @@ void trataMensagem(int sd, Mensagem *msg)
     }
 }
 
-void listar_clientes()
+void listar_usuarios(int cliente_sd)
 {
+    printf("Listando usuários...\n");
+    Mensagem msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.tipo = LISTAR_USUARIOS;
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
         if (cliente[i].sd != -1)
         {
-            printf("Cliente %d: %s\n", i, cliente[i].nome);
+            strcat(msg.mensagem, cliente[i].nome);
+            strcat(msg.mensagem, "\n");
         }
     }
+    substitui_n(msg.mensagem);
+
+    write(cliente_sd, &msg, sizeof(msg));
 }
+
 
 void trataCtrlC(int sig)
 {
@@ -219,6 +248,7 @@ int main()
                 perror("Accept failed");
                 exit(EXIT_FAILURE);
             }
+            char teste[16];
 
             // Add the new client to the chatroom
             if (addClient(newclientfd) == 0)
@@ -241,7 +271,6 @@ int main()
                 // Client activity
                 FD_CLR(clientfd, &readfds);
                 int valread = read(clientfd, &msg, sizeof(Mensagem));
-                trataMensagem(clientfd, &msg);
 
                 if (valread == 0)
                 {
@@ -256,10 +285,8 @@ int main()
                 }
                 else
                 {
-                    // Broadcast the message to all other clients
-                    msg.mensagem[valread] = '\0';
-                    // message[valread + strlen(message)] = '\0';
-                    broadcastMessage(&msg, clientfd);
+                    // Processa messagem
+                    trataMensagem(clientfd, &msg);
                 }
             }
         }

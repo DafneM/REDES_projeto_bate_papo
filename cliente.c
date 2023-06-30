@@ -7,6 +7,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/select.h>
+#include <signal.h>
 
 #include "cliente.h"
 
@@ -27,25 +28,83 @@ void limpa_cmd()
     fflush(stdout);
 }
 
+void trataCtrlC(int sig)
+{
+    printf("\nRecebido o sinal SIGINT (Ctrl+C)\n");
+    exit(0);
+}
+
+void trata_envia_mensagem(Mensagem *msg, clienteInfo *cliente)
+{
+
+    char str[MAX_SIZE];
+    memset(&str, 0, sizeof(str));
+    strcpy(msg->nome, cliente->nome);
+
+    limpa_cmd();
+    fgets(str, MAX_SIZE, stdin) != NULL;
+    if (strncmp(str, "/c", 2) == 0)
+    {
+        switch (str[2] - '0')
+        {
+        case CRIAR_SALA:
+            msg->tipo = CRIAR_SALA;
+            break;
+        case ENTRAR_SALA:
+            msg->tipo = ENTRAR_SALA;
+            break;
+        case SAIR_SALA:
+            msg->tipo = SAIR_SALA;
+            break;
+        case LISTAR_SALAS:
+            msg->tipo = LISTAR_SALAS;
+            break;
+        case LISTAR_USUARIOS:
+            msg->tipo = LISTAR_USUARIOS;
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+void trata_recebe_mensagem(Mensagem *msg)
+{
+    switch (msg->tipo)
+    {
+    case CRIAR_SALA:
+        msg->tipo = CRIAR_SALA;
+        break;
+    case ENTRAR_SALA:
+        msg->tipo = ENTRAR_SALA;
+        break;
+    case SAIR_SALA:
+        msg->tipo = SAIR_SALA;
+        break;
+    case LISTAR_SALAS:
+        msg->tipo = LISTAR_SALAS;
+        break;
+    case LISTAR_USUARIOS:
+        printf("----- LISTA DE USUÁRIOS ----\n");
+        break;
+    default:
+        break;
+    }
+    limpa_cmd();
+}
+
 void envia_mensagem(int sd, clienteInfo *cliente)
 {
     Mensagem msg;
     memset(&msg, 0, sizeof(Mensagem));
-    
-    msg.tipo = PADRAO;
-    strcpy(msg.nome, cliente->nome);
-    
 
-    limpa_cmd();
-    fgets(msg.mensagem, MAX_SIZE, stdin) != NULL;
+    trata_envia_mensagem(&msg, cliente);
 
-    substitui_n(msg.mensagem);
     if (strlen(msg.mensagem) == 0)
     {
         limpa_cmd();
     }
     send(sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
-    printf("\r----%s\n", msg.mensagem);
     if (strcmp(msg.mensagem, "FIM") == 0)
     {
         printf("Saindo...\n");
@@ -57,10 +116,11 @@ void recebe_mensagem(int sd)
     Mensagem bufin;
     memset(&bufin, 0, sizeof(bufin));
     int n;
-    // limpa_cmd();
-    n = recv(sd, bufin.mensagem, sizeof(bufin), 0);
+    limpa_cmd();
+    n = recv(sd, &bufin, sizeof(bufin), 0);
     if (n > 0)
     {
+        trata_recebe_mensagem(&bufin);
         printf("\r%s\n", bufin.mensagem);
         limpa_cmd();
     }
@@ -74,6 +134,9 @@ int main(int argc, char *argv[])
     clienteInfo cliente;
     fd_set readfds;
     Mensagem msg;
+
+    // Trata o sinal de ctrl+c
+    signal(SIGINT, trataCtrlC);
 
     if (argc < 3)
     {

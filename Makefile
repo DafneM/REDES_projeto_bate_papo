@@ -11,3 +11,8 @@ chatroom: chatroom.c cliente.h
 
 clean:
 	rm -f cliente chatroom
+
+run:
+	make clean
+	make
+	./chatroom 127.0.0.1 8080

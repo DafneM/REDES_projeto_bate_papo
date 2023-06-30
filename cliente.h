@@ -6,6 +6,7 @@ typedef struct clienteInfo
     int sd;
     char ip[16];
     char nome[50];
+    int porta;
 } clienteInfo;
 
 typedef enum {
@@ -14,7 +15,7 @@ typedef enum {
     ENTRAR_SALA = 2,
     SAIR_SALA = 3,
     LISTAR_SALAS = 4,
-    ENVIAR_MENSAGEM = 5,
+    LISTAR_USUARIOS = 5,
     SAIR = 6,
     CADASTRAR_USUARIO = 7,
 } tipo_mensagem;
