@@ -15,7 +15,7 @@
 #define MAX_MESSAGE_LENGTH 256
 #define MAX_SALAS 10
 // Global variables
-clienteInfo cliente[MAX_CLIENTS];
+clienteInfo clientes[MAX_CLIENTS];
 salaInfo salas[MAX_SALAS];
 // int clients[MAX_CLIENTS];
 char messages[MAX_CLIENTS][MAX_MESSAGE_LENGTH];
@@ -45,8 +45,8 @@ void createRoom(int sd, char *roomName)
     msg.tipo = CRIAR_SALA;
     int nomeExiste = 0;
 
-    for (int i = 0; i <= MAX_SALAS; i++)
-    {   
+    for (int i = 0; i < MAX_SALAS; i++)
+    {
         if (strcmp(salas[i].nome, roomName) == 0)
         {
             nomeExiste = 1;
@@ -64,9 +64,13 @@ void createRoom(int sd, char *roomName)
     else if (nomeExiste == 1)
     {
         snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Esta sala já existe, não foi possível criar mais salas!");
-    } else {
-        for (int i = 0; i <= MAX_SALAS; i++){
-            if((salas[i].id == -1)){
+    }
+    else
+    {
+        for (int i = 0; i < MAX_SALAS; i++)
+        {
+            if ((salas[i].id == -1))
+            {
                 salas[i].id = i;
                 strcpy(salas[i].nome, roomName);
                 break;
@@ -75,16 +79,50 @@ void createRoom(int sd, char *roomName)
         snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala %s criada com sucesso!", roomName);
     }
 
-    printf("antes do write\n");
     write(sd, &msg, sizeof(msg));
 }
 
+void entra_sala(clienteInfo *cliente, char *roomName)
+{
+    int countSalas = 0;
+    Mensagem msg;
+    msg.tipo = ENTRAR_SALA;
+    int indiceSala = -1;
+
+    for (int i = 0; i < MAX_SALAS; i++)
+    {
+        if (strcmp(salas[i].nome, roomName) == 0)
+        {
+            indiceSala = i;
+            break;
+        }
+    }
+    printf("%s", cliente);
+    if (indiceSala != -1 && salas[indiceSala].qtdClientes < MAX_CLIENTS)
+    {
+        salas[indiceSala].qtdClientes++;
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Você entrou na sala %s!", roomName);
+        cliente->idSala = salas[indiceSala].id;
+    }
+    else if (indiceSala != -1 && salas[indiceSala].qtdClientes == MAX_CLIENTS)
+    {
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "A sala %s está cheia!", roomName);
+    }
+    else
+    {
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "A sala %s não existe!", roomName);
+    }
+    write(cliente->sd, &msg, sizeof(msg));
+}
 // Function to initialize the client array
 void initClients()
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        cliente[i].sd = -1;
+        clientes[i].sd = -1;
+        clientes[i].idSala = -1;
+        strcpy(clientes[i].nome, "");
+        strcpy(clientes[i].ip, "");
     }
 }
 
@@ -93,6 +131,7 @@ void initSalas()
     for (int i = 0; i < MAX_SALAS; i++)
     {
         salas[i].id = -1;
+        salas[i].qtdClientes = 0;
         strcpy(salas[i].nome, "");
     }
 }
@@ -101,15 +140,14 @@ int addClient(int sd)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        if (cliente[i].sd == -1)
+        if (clientes[i].sd == -1)
         {
-            cliente[i].sd = sd;
+            clientes[i].sd = sd;
 
             if (sd > maxfd)
             {
                 maxfd = sd;
             }
-
             return 1;
         }
     }
@@ -122,16 +160,16 @@ void removeClient(int clientfd)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        if (cliente[i].sd == clientfd)
+        if (clientes[i].sd == clientfd)
         {
-            cliente[i].sd = -1;
+            clientes[i].sd = -1;
             break;
         }
     }
 }
 
 // Function to broadcast a message to all connected clients
-void broadcastMessage(Mensagem *msg, int sender)
+void broadcastMessage(Mensagem *msg, clienteInfo *sender)
 {
     char new_message[MAX_MESSAGE_LENGTH] = {0};
     if (strlen(msg->mensagem) == 0)
@@ -142,9 +180,9 @@ void broadcastMessage(Mensagem *msg, int sender)
     strcpy(msg->mensagem, new_message);
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        int clientfd = cliente[i].sd;
+        int clientfd = clientes[i].sd;
 
-        if (clientfd != -1 && clientfd != sender)
+        if (clientfd != -1 && clientfd != sender->sd && clientes[i].idSala == sender->idSala)
         {
             write(clientfd, msg, sizeof(Mensagem));
         }
@@ -156,49 +194,50 @@ void cadastrar_usuario(int sd, char *nome)
     socklen_t addrLen = sizeof(clientAddr);
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        if (cliente[i].sd == sd)
+        if (clientes[i].sd == sd)
         {
 
-            getpeername(cliente[i].sd, (struct sockaddr *)&clientAddr, (socklen_t *)&addrLen);
-            strcpy(cliente[i].nome, nome);
-            strcpy(cliente[i].ip, inet_ntoa(clientAddr.sin_addr));
-            printf("Cliente @%s conectado no endereço %s\n", cliente[i].nome, cliente[i].ip);
+            getpeername(clientes[i].sd, (struct sockaddr *)&clientAddr, (socklen_t *)&addrLen);
+            strcpy(clientes[i].nome, nome);
+            strcpy(clientes[i].ip, inet_ntoa(clientAddr.sin_addr));
+            printf("Cliente @%s conectado no endereço %s\n", clientes[i].nome, clientes[i].ip);
             break;
         }
     }
     // listar_clientes();
 }
-void trataMensagem(int sd, Mensagem *msg)
+void trataMensagem(clienteInfo *cliente, Mensagem *msg)
 {
     printf("Tratando mensagem...\n");
     printf("Tipo: %d\n", msg->tipo);
     switch (msg->tipo)
     {
     case CRIAR_SALA:
-        createRoom(sd, msg->mensagem);
+        createRoom(cliente->sd, msg->mensagem);
         break;
     case ENTRAR_SALA:
+        entra_sala(cliente, msg->mensagem);
         break;
     case SAIR_SALA:
         break;
     case LISTAR_SALAS:
-        listar_salas(sd);
+        listar_salas(cliente->sd);
         break;
     case LISTAR_USUARIOS:
-        listar_usuarios(sd);
+        listar_usuarios(cliente);
         break;
     case SAIR:
         break;
     case CADASTRAR_USUARIO:
-        cadastrar_usuario(sd, msg->nome);
+        cadastrar_usuario(cliente->sd, msg->nome);
         break;
     default:
-        broadcastMessage(msg, sd);
+        broadcastMessage(msg, cliente);
         break;
     }
 }
 
-void listar_usuarios(int cliente_sd)
+void listar_usuarios(clienteInfo *cliente)
 {
     printf("Listando usuários...\n");
     Mensagem msg;
@@ -206,15 +245,15 @@ void listar_usuarios(int cliente_sd)
     msg.tipo = LISTAR_USUARIOS;
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        if (cliente[i].sd != -1)
+        if (cliente->sd != -1 && clientes[i].idSala == cliente->idSala)
         {
-            strcat(msg.mensagem, cliente[i].nome);
+            strcat(msg.mensagem, clientes[i].nome);
             strcat(msg.mensagem, "\n");
         }
     }
     substitui_n(msg.mensagem);
 
-    write(cliente_sd, &msg, sizeof(msg));
+    write(cliente->sd, &msg, sizeof(msg));
 }
 
 void listar_salas(int cliente_sd)
@@ -301,7 +340,7 @@ int main()
 
         for (i = 0; i < MAX_CLIENTS; i++)
         {
-            int clientfd = cliente[i].sd;
+            int clientfd = clientes[i].sd;
 
             if (clientfd != -1)
             {
@@ -341,7 +380,7 @@ int main()
 
         for (i = 0; i < MAX_CLIENTS; i++)
         {
-            int clientfd = cliente[i].sd;
+            int clientfd = clientes[i].sd;
 
             if (clientfd != -1 && FD_ISSET(clientfd, &readfds))
             {
@@ -364,7 +403,7 @@ int main()
                 else
                 {
                     // Processa messagem
-                    trataMensagem(clientfd, &msg);
+                    trataMensagem(&clientes[i], &msg);
                 }
             }
         }

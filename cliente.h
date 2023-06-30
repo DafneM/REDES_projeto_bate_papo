@@ -6,7 +6,7 @@ typedef struct clienteInfo
     int sd;
     char ip[16];
     char nome[50];
-    int porta;
+    int idSala;
 } clienteInfo;
 
 

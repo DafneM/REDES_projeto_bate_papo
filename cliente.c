@@ -65,40 +65,55 @@ void joinRoom(Mensagem *msg)
     substitui_n(msg->mensagem);
 }
 
-void mostra_comandos(Mensagem *msg, clienteInfo *cliente)
+void mostra_comandos(clienteInfo *cliente)
 {
     char option[5];
+    Mensagem msg;
+    memset(&msg, 0, sizeof(Mensagem));
 
-    printf("\nEscolha uma opção:\n");
-    printf("/c - Criar sala\n");
-    printf("/e - Entrar em uma sala\n");
-    printf("/l - Listar salas\n");
-    printf("/s - Sair\n");
-    printf("Opção: ");
-    scanf("%s", option);
-    printf("\n");
-
-    if (strncmp(option, "/c", 2) == 0)
+    strcpy(msg.nome, cliente->nome);
+    while (1)
     {
-        msg->tipo = CRIAR_SALA;
-        createRoom(msg, cliente);
-    }
-    else if (strncmp(option, "/e", 2) == 0)
-    {
-        msg->tipo = ENTRAR_SALA;
-        joinRoom(&msg);
-    }
-    else if (strncmp(option, "/u", 2) == 0)
-    {
-        msg->tipo = LISTAR_USUARIOS;
-    }
-    else if (strncmp(option, "/exit", 2) == 0)
-    {
-        msg->tipo = SAIR_SALA;
-    }
-    else
-    {
-        printf("Opção inválida.\n");
+        printf("\nEscolha uma opção:\n");
+        printf("/c - Criar sala\n");
+        printf("/e - Entrar em uma sala\n");
+        printf("/l - Listar salas\n");
+        printf("/s - Sair\n");
+        printf("Opção: ");
+        scanf("%s", option);
+        printf("\n");
+        printf("Opção escolhida: %s\n", option);
+        if (strncmp(option, "/c", 2) == 0)
+        {
+            msg.tipo = CRIAR_SALA;
+            createRoom(&msg, cliente);
+            printf("Cria sala: %sn", msg.mensagem);
+            send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
+            recebe_mensagem(cliente->sd);
+        }
+        else if (strncmp(option, "/e", 2) == 0)
+        {
+            msg.tipo = ENTRAR_SALA;
+            joinRoom(&msg);
+            send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
+            recebe_mensagem(cliente->sd);
+            break;
+        }
+        else if (strncmp(option, "/l", 2) == 0)
+        {
+            msg.tipo = LISTAR_SALAS;
+            send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
+            recebe_mensagem(cliente->sd);
+        }
+        else if (strncmp(option, "/s", 2) == 0)
+        {
+            msg.tipo = SAIR_SALA;
+            break;
+        }
+        else
+        {
+            printf("Opção inválida.\n");
+        }
     }
 }
 
@@ -128,7 +143,6 @@ void trata_envia_mensagem(Mensagem *msg, char *str, clienteInfo *cliente)
             msg->tipo = LISTAR_USUARIOS;
             break;
         case 'h':
-            mostra_comandos(msg, cliente);
             break;
         default:
             printf("Comando inválido.\n");
@@ -180,7 +194,6 @@ void envia_mensagem(int sd, clienteInfo *cliente)
 
     if (strlen(msg.mensagem) == 0)
     {
-        printf("Digite uma mensagem.\n");
         limpa_cmd();
     }
     send(sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
@@ -261,6 +274,7 @@ int main(int argc, char *argv[])
     strcpy(msg.nome, cliente.nome);
     send(cliente.sd, &msg, sizeof(Mensagem), 0);
 
+    mostra_comandos(&cliente);
     while (1)
     {
         FD_ZERO(&readfds);
