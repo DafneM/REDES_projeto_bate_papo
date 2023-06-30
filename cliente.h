@@ -9,6 +9,14 @@ typedef struct clienteInfo
     int porta;
 } clienteInfo;
 
+
+typedef struct salaInfo
+{
+    int id;
+    char nome[50];
+    int qtdClientes;
+} salaInfo;
+
 typedef enum {
     PADRAO = 0,
     CRIAR_SALA = 1,

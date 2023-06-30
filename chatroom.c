@@ -13,25 +13,72 @@
 
 #define MAX_CLIENTS 10
 #define MAX_MESSAGE_LENGTH 256
-
+#define MAX_SALAS 10
 // Global variables
 clienteInfo cliente[MAX_CLIENTS];
+salaInfo salas[MAX_SALAS];
 // int clients[MAX_CLIENTS];
 char messages[MAX_CLIENTS][MAX_MESSAGE_LENGTH];
 fd_set readfds;
 int maxfd;
 
-void substitui_n(char *str) {
+void substitui_n(char *str)
+{
     int len = strlen(str);
-    if (len > 0) {
-        for (int i = len - 1; i >= 0; i--) {
-            if (str[i] == '\n') {
+    if (len > 0)
+    {
+        for (int i = len - 1; i >= 0; i--)
+        {
+            if (str[i] == '\n')
+            {
                 str[i] = '\0';
                 break;
             }
         }
     }
 }
+
+void createRoom(int sd, char *roomName)
+{
+    int countSalas = 0;
+    Mensagem msg;
+    msg.tipo = CRIAR_SALA;
+    int nomeExiste = 0;
+
+    for (int i = 0; i <= MAX_SALAS; i++)
+    {   
+        if (strcmp(salas[i].nome, roomName) == 0)
+        {
+            nomeExiste = 1;
+        }
+        else if (salas[i].id != -1)
+        {
+            countSalas++;
+        }
+    }
+
+    if (countSalas == MAX_SALAS)
+    {
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Número máximo de salas esgotado, não foi possível criar mais salas!");
+    }
+    else if (nomeExiste == 1)
+    {
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Esta sala já existe, não foi possível criar mais salas!");
+    } else {
+        for (int i = 0; i <= MAX_SALAS; i++){
+            if((salas[i].id == -1)){
+                salas[i].id = i;
+                strcpy(salas[i].nome, roomName);
+                break;
+            }
+        }
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala %s criada com sucesso!", roomName);
+    }
+
+    printf("antes do write\n");
+    write(sd, &msg, sizeof(msg));
+}
+
 // Function to initialize the client array
 void initClients()
 {
@@ -41,6 +88,14 @@ void initClients()
     }
 }
 
+void initSalas()
+{
+    for (int i = 0; i < MAX_SALAS; i++)
+    {
+        salas[i].id = -1;
+        strcpy(salas[i].nome, "");
+    }
+}
 // Function to add a client to the chatroom
 int addClient(int sd)
 {
@@ -78,20 +133,20 @@ void removeClient(int clientfd)
 // Function to broadcast a message to all connected clients
 void broadcastMessage(Mensagem *msg, int sender)
 {
-    // char new_message[MAX_MESSAGE_LENGTH] = {0};
+    char new_message[MAX_MESSAGE_LENGTH] = {0};
     if (strlen(msg->mensagem) == 0)
     {
         return;
     }
-    // snprintf(new_message, MAX_MESSAGE_LENGTH, "@%s: %s", msg->nome, msg->mensagem);
-
+    snprintf(new_message, MAX_MESSAGE_LENGTH, "@%s: %s", msg->nome, msg->mensagem);
+    strcpy(msg->mensagem, new_message);
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
         int clientfd = cliente[i].sd;
 
         if (clientfd != -1 && clientfd != sender)
         {
-            write(clientfd, &msg, sizeof(msg));
+            write(clientfd, msg, sizeof(Mensagem));
         }
     }
 }
@@ -120,12 +175,14 @@ void trataMensagem(int sd, Mensagem *msg)
     switch (msg->tipo)
     {
     case CRIAR_SALA:
+        createRoom(sd, msg->mensagem);
         break;
     case ENTRAR_SALA:
         break;
     case SAIR_SALA:
         break;
     case LISTAR_SALAS:
+        listar_salas(sd);
         break;
     case LISTAR_USUARIOS:
         listar_usuarios(sd);
@@ -160,6 +217,25 @@ void listar_usuarios(int cliente_sd)
     write(cliente_sd, &msg, sizeof(msg));
 }
 
+void listar_salas(int cliente_sd)
+{
+    printf("Listando Salas...\n");
+    Mensagem msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.tipo = LISTAR_SALAS;
+    for (int i = 0; i < MAX_SALAS; i++)
+    {
+        printf("Sala %d: %s\n", salas[i].id, salas[i].nome);
+        if (salas[i].id != -1)
+        {
+            strcat(msg.mensagem, salas[i].nome);
+            strcat(msg.mensagem, "\n");
+        }
+    }
+    substitui_n(msg.mensagem);
+    printf("Mensagem: %s\n", msg.mensagem);
+    write(cliente_sd, &msg, sizeof(msg));
+}
 
 void trataCtrlC(int sig)
 {
@@ -213,6 +289,7 @@ int main()
     }
 
     initClients();
+    initSalas();
     maxfd = serverfd;
 
     printf("Chatroom server started. Waiting for connections...\n");
@@ -271,6 +348,7 @@ int main()
                 // Client activity
                 FD_CLR(clientfd, &readfds);
                 int valread = read(clientfd, &msg, sizeof(Mensagem));
+                printf("%s\n", msg.mensagem);
 
                 if (valread == 0)
                 {

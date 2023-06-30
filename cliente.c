@@ -15,10 +15,17 @@
 
 void substitui_n(char *str)
 {
-    char *newline_pos = strchr(str, '\n');
-    if (newline_pos != NULL)
+    int len = strlen(str);
+    if (len > 0)
     {
-        *newline_pos = '\0';
+        for (int i = len - 1; i >= 0; i--)
+        {
+            if (str[i] == '\n')
+            {
+                str[i] = '\0';
+                break;
+            }
+        }
     }
 }
 
@@ -33,38 +40,105 @@ void trataCtrlC(int sig)
     printf("\nRecebido o sinal SIGINT (Ctrl+C)\n");
     exit(0);
 }
+void createRoom(Mensagem *msg, clienteInfo *cliente)
+{
+    char roomName[30];
 
-void trata_envia_mensagem(Mensagem *msg, clienteInfo *cliente)
+    printf("Digite o nome da sala que deseja criar: ");
+    scanf("%s", roomName);
+
+    strcpy(msg->mensagem, roomName);
+    substitui_n(msg->mensagem);
+
+    // envia_mensagem(msg, cliente);
+    // recebe_mensagem(cliente->sd);
+}
+
+void joinRoom(Mensagem *msg)
+{
+    char roomName[30];
+
+    printf("Digite o nome da sala: ");
+    scanf("%s", roomName);
+
+    strcpy(msg->mensagem, roomName);
+    substitui_n(msg->mensagem);
+}
+
+void mostra_comandos(Mensagem *msg, clienteInfo *cliente)
+{
+    char option[5];
+
+    printf("\nEscolha uma opção:\n");
+    printf("/c - Criar sala\n");
+    printf("/e - Entrar em uma sala\n");
+    printf("/l - Listar salas\n");
+    printf("/s - Sair\n");
+    printf("Opção: ");
+    scanf("%s", option);
+    printf("\n");
+
+    if (strncmp(option, "/c", 2) == 0)
+    {
+        msg->tipo = CRIAR_SALA;
+        createRoom(msg, cliente);
+    }
+    else if (strncmp(option, "/e", 2) == 0)
+    {
+        msg->tipo = ENTRAR_SALA;
+        joinRoom(&msg);
+    }
+    else if (strncmp(option, "/u", 2) == 0)
+    {
+        msg->tipo = LISTAR_USUARIOS;
+    }
+    else if (strncmp(option, "/exit", 2) == 0)
+    {
+        msg->tipo = SAIR_SALA;
+    }
+    else
+    {
+        printf("Opção inválida.\n");
+    }
+}
+
+void trata_envia_mensagem(Mensagem *msg, char *str, clienteInfo *cliente)
 {
 
-    char str[MAX_SIZE];
-    memset(&str, 0, sizeof(str));
     strcpy(msg->nome, cliente->nome);
 
-    limpa_cmd();
-    fgets(str, MAX_SIZE, stdin) != NULL;
-    if (strncmp(str, "/c", 2) == 0)
+    if (strncmp(str, "/", 1) == 0)
     {
-        switch (str[2] - '0')
+        switch (str[1])
         {
-        case CRIAR_SALA:
+        case 'c':
             msg->tipo = CRIAR_SALA;
+            createRoom(msg, cliente);
             break;
-        case ENTRAR_SALA:
+        case 'e':
             msg->tipo = ENTRAR_SALA;
             break;
-        case SAIR_SALA:
+        case 's':
             msg->tipo = SAIR_SALA;
             break;
-        case LISTAR_SALAS:
+        case 'l':
             msg->tipo = LISTAR_SALAS;
             break;
-        case LISTAR_USUARIOS:
+        case 'u':
             msg->tipo = LISTAR_USUARIOS;
             break;
+        case 'h':
+            mostra_comandos(msg, cliente);
+            break;
         default:
+            printf("Comando inválido.\n");
             break;
         }
+    }
+    else
+    {
+        strcpy(msg->mensagem, str);
+        substitui_n(msg->mensagem);
     }
 }
 
@@ -82,7 +156,7 @@ void trata_recebe_mensagem(Mensagem *msg)
         msg->tipo = SAIR_SALA;
         break;
     case LISTAR_SALAS:
-        msg->tipo = LISTAR_SALAS;
+        printf("----- LISTA DE SALAS ----\n");
         break;
     case LISTAR_USUARIOS:
         printf("----- LISTA DE USUÁRIOS ----\n");
@@ -96,12 +170,17 @@ void trata_recebe_mensagem(Mensagem *msg)
 void envia_mensagem(int sd, clienteInfo *cliente)
 {
     Mensagem msg;
+    char str[MAX_SIZE];
     memset(&msg, 0, sizeof(Mensagem));
+    memset(&str, 0, sizeof(str));
 
-    trata_envia_mensagem(&msg, cliente);
+    limpa_cmd();
+    fgets(str, MAX_SIZE, stdin) != NULL;
+    trata_envia_mensagem(&msg, str, cliente);
 
     if (strlen(msg.mensagem) == 0)
     {
+        printf("Digite uma mensagem.\n");
         limpa_cmd();
     }
     send(sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
@@ -117,7 +196,7 @@ void recebe_mensagem(int sd)
     memset(&bufin, 0, sizeof(bufin));
     int n;
     limpa_cmd();
-    n = recv(sd, &bufin, sizeof(bufin), 0);
+    n = recv(sd, &bufin, sizeof(Mensagem), 0);
     if (n > 0)
     {
         trata_recebe_mensagem(&bufin);
@@ -187,7 +266,7 @@ int main(int argc, char *argv[])
         FD_ZERO(&readfds);
         FD_SET(STDIN_FILENO, &readfds);
         FD_SET(cliente.sd, &readfds);
-        fflush(stdin);
+        limpa_cmd();
 
         if (select(cliente.sd + 1, &readfds, NULL, NULL, NULL) < 0)
         {
