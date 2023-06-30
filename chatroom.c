@@ -1,327 +1,216 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <netdb.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <sys/select.h>
 
-#define MAX_CLIENTS 10
-#define MAX_ROOMS 5
-#define MAX_ROOM_NAME_LENGTH 50
-#define MAX_MESSAGE_LENGTH 256
+#define MAX_ROOMS 10
+#define MAX_NAME_LENGTH 100
+#define MAX_PARTICIPANTS 100
+#define MAX_BUFFER_SIZE 1024
+#define MAX_CLIENTS 100
 
-// Structure to represent a chat room
 typedef struct {
-    char name[MAX_ROOM_NAME_LENGTH];
-    int participants[MAX_CLIENTS];
+    char name[MAX_NAME_LENGTH];
+    int participantCount;
+    int participants[MAX_PARTICIPANTS];
 } ChatRoom;
 
-// Global variables
-int clients[MAX_CLIENTS];
 ChatRoom rooms[MAX_ROOMS];
-fd_set readfds;
-int maxfd;
+int currentRoomCount = 0;
 
-// Function to initialize the client array
-void initClients() {
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        clients[i] = -1;
+void createRoom(const char *roomName) {
+    if (currentRoomCount >= MAX_ROOMS) {
+        printf("Não é possível criar mais salas. Limite máximo atingido.\n");
+        return;
+    }
+
+    strncpy(rooms[currentRoomCount].name, roomName, MAX_NAME_LENGTH - 1);
+    rooms[currentRoomCount].name[MAX_NAME_LENGTH - 1] = '\0';
+    rooms[currentRoomCount].participantCount = 0;
+    currentRoomCount++;
+
+    printf("Sala '%s' criada com sucesso.\n", roomName);
+}
+
+void listParticipants(int roomId) {
+    if (roomId < 0 || roomId >= currentRoomCount) {
+        printf("Sala inválida.\n");
+        return;
+    }
+
+    ChatRoom *room = &rooms[roomId];
+
+    printf("Participantes da sala '%s':\n", room->name);
+    for (int i = 0; i < room->participantCount; i++) {
+        printf("- Participante %d\n", room->participants[i]);
     }
 }
 
-// Function to initialize the chat rooms
-void initRooms() {
-    for (int i = 0; i < MAX_ROOMS; i++) {
-        strcpy(rooms[i].name, "");
-        for (int j = 0; j < MAX_CLIENTS; j++) {
-            rooms[i].participants[j] = -1;
-        }
+void joinRoom(int roomId, int participantId) {
+    if (roomId < 0 || roomId >= currentRoomCount) {
+        printf("Sala inválida.\n");
+        return;
+    }
+
+    ChatRoom *room = &rooms[roomId];
+
+    if (room->participantCount >= MAX_PARTICIPANTS) {
+        printf("Não é possível entrar na sala. Limite máximo de participantes atingido.\n");
+        return;
+    }
+
+    room->participants[room->participantCount] = participantId;
+    room->participantCount++;
+
+    printf("Você entrou na sala '%s' como Participante %d.\n", room->name, participantId);
+}
+
+void handleClientCommand(int clientSocket, const char *command) {
+    if (strncmp(command, "CREATE_ROOM", 11) == 0) {
+        char roomName[MAX_NAME_LENGTH];
+        sscanf(command, "CREATE_ROOM %[^\n]", roomName);
+        createRoom(roomName);
+        send(clientSocket, "Sala criada com sucesso.\n", 25, 0);
+    } else if (strncmp(command, "LIST_PARTICIPANTS", 17) == 0) {
+        int roomId;
+        sscanf(command, "LIST_PARTICIPANTS %d", &roomId);
+        listParticipants(roomId);
+        send(clientSocket, "Lista de participantes enviada.\n", 32, 0);
+    } else if (strncmp(command, "JOIN_ROOM", 9) == 0) {
+        int roomId, participantId;
+        sscanf(command, "JOIN_ROOM %d %d", &roomId, &participantId);
+        joinRoom(roomId, participantId);
+        send(clientSocket, "Entrou na sala com sucesso.\n", 28, 0);
+    } else if (strncmp(command, "QUIT", 4) == 0) {
+        send(clientSocket, "Encerrando conexão.\n", 21, 0);
+        close(clientSocket);
+    } else {
+        send(clientSocket, "Comando inválido.\n", 18, 0);
     }
 }
 
-// Function to find an available room index
-int findAvailableRoom() {
-    for (int i = 0; i < MAX_ROOMS; i++) {
-        if (strcmp(rooms[i].name, "") == 0) {
-            return i;
-        }
-    }
-    return -1; // No available room found
-}
-
-// Function to add a client to a chat room
-int addClientToRoom(int clientfd, int roomIndex) {
-    if (roomIndex >= 0 && roomIndex < MAX_ROOMS) {
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            if (rooms[roomIndex].participants[i] == -1) {
-                rooms[roomIndex].participants[i] = clientfd;
-
-                if (clientfd > maxfd) {
-                    maxfd = clientfd;
-                }
-
-                return 1;
-            }
-        }
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        printf("Uso correto: %s <Porta_do_servidor>\n", argv[0]);
+        exit(1);
     }
 
-    return 0;
-}
-
-// Function to remove a client from a chat room
-void removeClientFromRoom(int clientfd, int roomIndex) {
-    if (roomIndex >= 0 && roomIndex < MAX_ROOMS) {
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            if (rooms[roomIndex].participants[i] == clientfd) {
-                rooms[roomIndex].participants[i] = -1;
-                break;
-            }
-        }
-    }
-}
-
-// Function to find the room index by name
-int findRoomIndexByName(const char* name) {
-    for (int i = 0; i < MAX_ROOMS; i++) {
-        if (strcmp(rooms[i].name, name) == 0) {
-            return i;
-        }
-    }
-    return -1; // Room not found
-}
-
-// Function to create a chat room
-int createRoom(const char* name) {
-    int roomIndex = findAvailableRoom();
-    if (roomIndex != -1) {
-        strcpy(rooms[roomIndex].name, name);
-        return 1;
-    }
-    return 0;
-}
-
-// Function to remove a chat room
-void removeRoom(int roomIndex) {
-    if (roomIndex >= 0 && roomIndex < MAX_ROOMS) {
-        strcpy(rooms[roomIndex].name, "");
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            rooms[roomIndex].participants[i] = -1;
-        }
-    }
-}
-
-// Function to broadcast a message to all participants in a room
-void broadcastMessageToRoom(char* message, int sender, int roomIndex) {
-    char new_message[MAX_MESSAGE_LENGTH] = {0};
-
-    snprintf(new_message, MAX_MESSAGE_LENGTH, "[%d] => %s", sender, message);
-
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        int clientfd = rooms[roomIndex].participants[i];
-
-        if (clientfd != -1 && clientfd != sender) {
-            write(clientfd, new_message, strlen(new_message));
-        }
-    }
-}
-
-int main() {
-    int serverfd, newclientfd;
+    int serverSocket, clientSocket;
     struct sockaddr_in serverAddr, clientAddr;
-    socklen_t addrLen = sizeof(clientAddr);
-    int activity, i, valread;
-    char message[MAX_MESSAGE_LENGTH];
-    int roomIndex = -1;
+    socklen_t clientAddrLen;
 
-    // Create a socket for the server
-    serverfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverfd == -1) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket < 0) {
+        perror("Falha ao criar socket");
+        exit(1);
     }
 
-    // Set socket options
-    int opt = 1;
-    if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
-        perror("Setsockopt failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Configure server address
+    memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(8080);
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverAddr.sin_port = htons(atoi(argv[1]));
 
-    // Bind the socket to the specified address and port
-    if (bind(serverfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("Bind failed");
-        exit(EXIT_FAILURE);
+    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
+        perror("Falha ao fazer bind");
+        exit(1);
     }
 
-    // Listen for incoming connections
-    if (listen(serverfd, MAX_CLIENTS) == -1) {
-        perror("Listen failed");
-        exit(EXIT_FAILURE);
+    if (listen(serverSocket, 5) < 0) {
+        perror("Falha ao ouvir");
+        exit(1);
     }
 
-    initClients();
-    initRooms();
-    maxfd = serverfd;
+    printf("Servidor ouvindo na porta %s ...\n\n", argv[1]);
 
-    printf("Chatroom server started. Waiting for connections...\n");
+    // Variáveis para I/O multiplexado
+    fd_set readSet;
+    int maxFd;
+    int clientSockets[MAX_CLIENTS];
+    int clientCount = 0;
+
+    // Inicializa o conjunto de descritores de arquivo
+    FD_ZERO(&readSet);
+    FD_SET(serverSocket, &readSet);
+    maxFd = serverSocket;
 
     while (1) {
-        FD_ZERO(&readfds);
-        FD_SET(serverfd, &readfds);
+        fd_set tempReadSet = readSet;
 
-        for (i = 0; i < MAX_CLIENTS; i++) {
-            int clientfd = clients[i];
-
-            if (clientfd != -1) {
-                FD_SET(clientfd, &readfds);
-            }
+        // Aguarda por atividade em algum socket
+        if (select(maxFd + 1, &tempReadSet, NULL, NULL, NULL) < 0) {
+            perror("Falha na chamada select");
+            exit(1);
         }
 
-        activity = select(maxfd + 1, &readfds, NULL, NULL, NULL);
-        if (activity == -1) {
-            perror("Select failed");
-            exit(EXIT_FAILURE);
+        // Verifica se há atividade no socket do servidor
+        if (FD_ISSET(serverSocket, &tempReadSet)) {
+            // Aceita a conexão do cliente
+            clientAddrLen = sizeof(clientAddr);
+            clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen);
+            if (clientSocket < 0) {
+                perror("Falha ao aceitar conexão");
+                exit(1);
+            }
+
+            printf("Cliente conectado: %s:%d\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
+
+            // Adiciona o socket do cliente ao conjunto de descritores de arquivo
+            FD_SET(clientSocket, &readSet);
+
+            // Atualiza o valor máximo de descritor de arquivo
+            if (clientSocket > maxFd) {
+                maxFd = clientSocket;
+            }
+
+            // Armazena o socket do cliente na lista de sockets dos clientes
+            clientSockets[clientCount] = clientSocket;
+            clientCount++;
+
+            // Envia a mensagem de boas-vindas ao cliente
+            send(clientSocket, "Bem-vindo ao servidor de chat.\n", 30, 0);
         }
 
-        if (FD_ISSET(serverfd, &readfds)) {
-            // New connection request
-            newclientfd = accept(serverfd, (struct sockaddr*)&clientAddr, &addrLen);
-            if (newclientfd == -1) {
-                perror("Accept failed");
-                exit(EXIT_FAILURE);
-            }
+        // Verifica os sockets dos clientes para atividade de leitura
+        for (int i = 0; i < clientCount; i++) {
+            clientSocket = clientSockets[i];
 
-            roomIndex = findAvailableRoom();
-            if (roomIndex != -1) {
-                strcpy(rooms[roomIndex].name, "");
-            }
+            if (FD_ISSET(clientSocket, &tempReadSet)) {
+                char buffer[MAX_BUFFER_SIZE];
+                memset(buffer, 0, sizeof(buffer));
 
-            if (addClientToRoom(newclientfd, roomIndex) == 0) {
-                printf("Chatroom is full. Connection rejected.\n");
-                close(newclientfd);
-            } else {
-                printf("New client connected. Socket fd is %d\n", newclientfd);
-            }
-        }
+                // Lê a mensagem enviada pelo cliente
+                ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+                if (bytesRead < 0) {
+                    perror("Falha ao receber mensagem do cliente");
+                    exit(1);
+                } else if (bytesRead == 0) {
+                    // O cliente encerrou a conexão
+                    printf("Cliente desconectado: %s:%d\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
 
-        for (i = 0; i < MAX_CLIENTS; i++) {
-            int clientfd = clients[i];
+                    // Remove o socket do cliente do conjunto de descritores de arquivo
+                    FD_CLR(clientSocket, &readSet);
 
-            if (clientfd != -1 && FD_ISSET(clientfd, &readfds)) {
-                // Client activity
-                FD_CLR(clientfd, &readfds);
-                valread = read(clientfd, message, MAX_MESSAGE_LENGTH);
+                    // Fecha o socket do cliente
+                    close(clientSocket);
 
-                if (valread == 0) {
-                    // Client disconnected
-                    getpeername(clientfd, (struct sockaddr*)&clientAddr, &addrLen);
-                    printf("Client disconnected. IP address: %s, Port: %d\n",
-                        inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
-
-                    // Remove the client from the chatroom
-                    removeClientFromRoom(clientfd, roomIndex);
-                    close(clientfd);
-                } else {
-                    // Handle client message
-                    message[valread] = '\0';
-
-                    if (message[0] == '/') {
-                        // Command message
-                        char* command = strtok(message, " ");
-                        if (strcmp(command, "/create") == 0) {
-                            char* roomName = strtok(NULL, " ");
-                            if (roomName != NULL) {
-                                if (createRoom(roomName)) {
-                                    printf("New chat room created: %s\n", roomName);
-                                    write(clientfd, "Chat room created successfully.", strlen("Chat room created successfully."));
-                                } else {
-                                    write(clientfd, "Failed to create chat room.", strlen("Failed to create chat room."));
-                                }
-                            } else {
-                                write(clientfd, "Invalid command syntax.", strlen("Invalid command syntax."));
-                            }
-                        } else if (strcmp(command, "/join") == 0) {
-                            char* roomName = strtok(NULL, " ");
-                            if (roomName != NULL) {
-                                int roomIndex = findRoomIndexByName(roomName);
-                                if (roomIndex != -1) {
-                                    if (addClientToRoom(clientfd, roomIndex)) {
-                                        printf("Client %d joined chat room: %s\n", clientfd, roomName);
-                                        write(clientfd, "Joined chat room successfully.", strlen("Joined chat room successfully."));
-                                    } else {
-                                        write(clientfd, "Chat room is full.", strlen("Chat room is full."));
-                                    }
-                                } else {
-                                    write(clientfd, "Chat room not found.", strlen("Chat room not found."));
-                                }
-                            } else {
-                                write(clientfd, "Invalid command syntax.", strlen("Invalid command syntax."));
-                            }
-                        } else if (strcmp(command, "/leave") == 0) {
-                            int leftRoomIndex = -1;
-                            for (int j = 0; j < MAX_ROOMS; j++) {
-                                for (int k = 0; k < MAX_CLIENTS; k++) {
-                                    if (rooms[j].participants[k] == clientfd) {
-                                        leftRoomIndex = j;
-                                        break;
-                                    }
-                                }
-                                if (leftRoomIndex != -1) {
-                                    break;
-                                }
-                            }
-
-                            if (leftRoomIndex != -1) {
-                                removeClientFromRoom(clientfd, leftRoomIndex);
-                                printf("Client %d left chat room: %s\n", clientfd, rooms[leftRoomIndex].name);
-                                write(clientfd, "Left chat room successfully.", strlen("Left chat room successfully."));
-                            } else {
-                                write(clientfd, "You are not currently in any chat room.", strlen("You are not currently in any chat room."));
-                            }
-                        } else if (strcmp(command, "/list") == 0) {
-                            char roomList[MAX_MESSAGE_LENGTH];
-                            roomList[0] = '\0';
-                            for (int j = 0; j < MAX_ROOMS; j++) {
-                                if (strcmp(rooms[j].name, "") != 0) {
-                                    strcat(roomList, rooms[j].name);
-                                    strcat(roomList, "\n");
-                                }
-                            }
-                            write(clientfd, roomList, strlen(roomList));
-                        } else {
-                            write(clientfd, "Unknown command.", strlen("Unknown command."));
-                        }
-                    } else {
-                        // Regular message
-                        int currentRoomIndex = -1;
-                        for (int j = 0; j < MAX_ROOMS; j++) {
-                            for (int k = 0; k < MAX_CLIENTS; k++) {
-                                if (rooms[j].participants[k] == clientfd) {
-                                    currentRoomIndex = j;
-                                    break;
-                                }
-                            }
-                            if (currentRoomIndex != -1) {
-                                break;
-                            }
-                        }
-
-                        if (currentRoomIndex != -1) {
-                            printf("Received message from client %d in room %s: %s\n", clientfd, rooms[currentRoomIndex].name, message);
-                            broadcastMessageToRoom(message, clientfd, currentRoomIndex);
-                        } else {
-                            write(clientfd, "You are not currently in any chat room.", strlen("You are not currently in any chat room."));
-                        }
+                    // Remove o socket do cliente da lista de sockets dos clientes
+                    for (int j = i; j < clientCount - 1; j++) {
+                        clientSockets[j] = clientSockets[j + 1];
                     }
+                    clientCount--;
+
+                    continue;
                 }
+
+                printf("Mensagem recebida do cliente %s:%d: %s\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port), buffer);
+
+                // Trata o comando enviado pelo cliente
+                handleClientCommand(clientSocket, buffer);
             }
         }
     }

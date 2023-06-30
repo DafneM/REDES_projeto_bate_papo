@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #define MAX_SIZE    	80
 
@@ -46,7 +47,7 @@ int main(int argc,char * argv[]) {
 	while (1) {
 		printf("> ");
 		fgets(bufout, MAX_SIZE, stdin);    /* le dados do teclado */
-		send(sd,&bufout,strlen(bufout),0); /* enviando dados ...  */
+		send(sd, &bufout, strlen(bufout), 0);
 		if (strncmp(bufout, "FIM",3) == 0) 
 			break;
 	} /* fim while */
