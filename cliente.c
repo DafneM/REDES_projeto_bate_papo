@@ -27,22 +27,26 @@ void limpa_cmd()
     fflush(stdout);
 }
 
-void envia_mensagem(int sd, clienteInfo cliente)
+void envia_mensagem(int sd, clienteInfo *cliente)
 {
-    char bufout[MAX_SIZE];
-    memset(bufout, 0, sizeof(bufout));
+    Mensagem msg;
+    memset(&msg, 0, sizeof(Mensagem));
+    
+    msg.tipo = PADRAO;
+    strcpy(msg.nome, cliente->nome);
+    
 
     limpa_cmd();
-    fgets(bufout, MAX_SIZE, stdin) != NULL;
+    fgets(msg.mensagem, MAX_SIZE, stdin) != NULL;
 
-    substitui_n(bufout);
-    if (strlen(bufout) == 0)
+    substitui_n(msg.mensagem);
+    if (strlen(msg.mensagem) == 0)
     {
         limpa_cmd();
     }
-
-    send(sd, bufout, MAX_SIZE, 0); /* enviando dados ...  */
-    if (strcmp(bufout, "FIM") == 0)
+    send(sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
+    printf("\r----%s\n", msg.mensagem);
+    if (strcmp(msg.mensagem, "FIM") == 0)
     {
         printf("Saindo...\n");
     }
@@ -50,27 +54,26 @@ void envia_mensagem(int sd, clienteInfo cliente)
 
 void recebe_mensagem(int sd)
 {
-    char bufin[MAX_SIZE];
+    Mensagem bufin;
+    memset(&bufin, 0, sizeof(bufin));
     int n;
-
-    memset(bufin, 0, sizeof(bufin));
-
-    n = recv(sd, bufin, sizeof(bufin), 0);
+    // limpa_cmd();
+    n = recv(sd, bufin.mensagem, sizeof(bufin), 0);
     if (n > 0)
     {
-        printf("\r%s\n", bufin);
+        printf("\r%s\n", bufin.mensagem);
         limpa_cmd();
     }
 }
 
 int main(int argc, char *argv[])
 {
-    int sd;
     struct sockaddr_in serverAddr, clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
     char nome_usuario[50];
-    clienteInfo clienteInfo;
+    clienteInfo cliente;
     fd_set readfds;
+    Mensagem msg;
 
     if (argc < 3)
     {
@@ -78,50 +81,65 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    // printf("Digite seu nome de usuário: ");
-    // if (fgets(clienteInfo.nome, 50, stdin) != NULL)
-    //     substitui_n(clienteInfo.nome);
+    printf("Digite seu nome de usuário: ");
+    if (fgets(cliente.nome, 50, stdin) != NULL)
+        substitui_n(cliente.nome);
 
     /* configura endereco do servidor */
     serverAddr.sin_family = AF_INET; /* config. socket p. internet*/
     serverAddr.sin_addr.s_addr = inet_addr(argv[1]);
     serverAddr.sin_port = htons(atoi(argv[2]));
 
-    sd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sd < 0)
+    cliente.sd = socket(AF_INET, SOCK_STREAM, 0);
+    if (cliente.sd < 0)
     {
         fprintf(stderr, "Criacao do socket falhou!\n");
         exit(1);
     }
 
     /* Conecta socket ao servidor definido */
-    if (connect(sd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
+    if (connect(cliente.sd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
     {
         fprintf(stderr, "Tentativa de conexao falhou!\n");
         exit(1);
     }
 
+    if (getpeername(cliente.sd, (struct sockaddr *)&clientAddr, &addrLen) == -1)
+    {
+        perror("Erro ao obter o endereço IP do cliente");
+        exit(EXIT_FAILURE);
+    }
+
+    // Copie o endereço IP para cliente.ip
+    strncpy(cliente.ip, inet_ntoa(clientAddr.sin_addr), sizeof(cliente.ip) - 1);
+    printf("Conectado ao servidor %s:%d\n", cliente.ip, ntohs(clientAddr.sin_port));
+    printf("Bem vindo %s!\n", cliente.nome);
+
+    msg.tipo = CADASTRAR_USUARIO;
+    strcpy(msg.nome, cliente.nome);
+    send(cliente.sd, &msg, sizeof(Mensagem), 0);
+
     while (1)
     {
         FD_ZERO(&readfds);
         FD_SET(STDIN_FILENO, &readfds);
-        FD_SET(sd, &readfds);
+        FD_SET(cliente.sd, &readfds);
         fflush(stdin);
 
-        if (select(sd + 1, &readfds, NULL, NULL, NULL) < 0)
+        if (select(cliente.sd + 1, &readfds, NULL, NULL, NULL) < 0)
         {
             perror("Select falhou!");
             exit(1);
         }
         if (FD_ISSET(STDIN_FILENO, &readfds))
         {
-            envia_mensagem(sd, clienteInfo);
+            envia_mensagem(cliente.sd, &cliente);
         }
-        if (FD_ISSET(sd, &readfds))
+        if (FD_ISSET(cliente.sd, &readfds))
         {
-            recebe_mensagem(sd);
+            recebe_mensagem(cliente.sd);
         }
     }
-    close(sd);
+    close(cliente.sd);
     return 0;
 }
