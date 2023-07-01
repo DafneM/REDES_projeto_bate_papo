@@ -65,6 +65,13 @@ void joinRoom(Mensagem *msg)
     substitui_n(msg->mensagem);
 }
 
+void exitRoom()
+{
+    Mensagem msg;
+    memset(&msg, 0, sizeof(Mensagem));
+    msg.tipo = SAIR_SALA;
+}
+
 void mostra_comandos(clienteInfo *cliente)
 {
     char option[5];
@@ -78,7 +85,7 @@ void mostra_comandos(clienteInfo *cliente)
         printf("/c - Criar sala\n");
         printf("/e - Entrar em uma sala\n");
         printf("/l - Listar salas\n");
-        printf("/s - Sair\n");
+        printf("/EXIT - Fechar\n");
         printf("Opção: ");
         scanf("%s", option);
         printf("\n");
@@ -105,9 +112,8 @@ void mostra_comandos(clienteInfo *cliente)
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
             recebe_mensagem(cliente->sd);
         }
-        else if (strncmp(option, "/s", 2) == 0)
+        else if (strncmp(option, "/SAIR", 2) == 0)
         {
-            msg.tipo = SAIR_SALA;
             break;
         }
         else
