@@ -12,6 +12,7 @@
 #include "cliente.h"
 
 #define MAX_SIZE 255
+int returnToMenu = 0;
 
 void substitui_n(char *str)
 {
@@ -120,6 +121,11 @@ void mostra_comandos(clienteInfo *cliente)
         {
             printf("Opção inválida.\n");
         }
+
+        if (returnToMenu) {
+            returnToMenu = 0;
+            break;
+        }
     }
 }
 
@@ -174,6 +180,7 @@ void trata_recebe_mensagem(Mensagem *msg)
         break;
     case SAIR_SALA:
         msg->tipo = SAIR_SALA;
+        returnToMenu = 1;
         break;
     case LISTAR_SALAS:
         printf("----- LISTA DE SALAS ----\n");
@@ -300,6 +307,9 @@ int main(int argc, char *argv[])
         if (FD_ISSET(cliente.sd, &readfds))
         {
             recebe_mensagem(cliente.sd);
+            if(returnToMenu == 1){
+                mostra_comandos(&cliente);
+            }
         }
     }
     close(cliente.sd);
