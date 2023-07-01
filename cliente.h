@@ -26,6 +26,7 @@ typedef enum {
     LISTAR_USUARIOS = 5,
     SAIR = 6,
     CADASTRAR_USUARIO = 7,
+    DELETAR_SALA = 8,
 } tipo_mensagem;
 
 typedef struct Mensagem

@@ -66,6 +66,16 @@ void joinRoom(Mensagem *msg)
     substitui_n(msg->mensagem);
 }
 
+void deletRoom (Mensagem *msg){
+    char roomName[30];
+
+    printf("Digite o nome da sala que você deseja deletar: ");
+    scanf("%s", roomName);
+
+    strcpy(msg->mensagem, roomName);
+    substitui_n(msg->mensagem);
+}
+
 void exitRoom()
 {
     Mensagem msg;
@@ -84,6 +94,7 @@ void mostra_comandos(clienteInfo *cliente)
     {
         printf("\nEscolha uma opção:\n");
         printf("/c - Criar sala\n");
+        printf("/d - Deletar sala\n");
         printf("/e - Entrar em uma sala\n");
         printf("/l - Listar salas\n");
         printf("/EXIT - Fechar\n");
@@ -103,6 +114,14 @@ void mostra_comandos(clienteInfo *cliente)
         {
             msg.tipo = ENTRAR_SALA;
             joinRoom(&msg);
+            send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
+            recebe_mensagem(cliente->sd);
+            break;
+        }
+        else if (strncmp(option, "/d", 2) == 0)
+        {
+            msg.tipo = DELETAR_SALA;
+            deletRoom(&msg);
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
             recebe_mensagem(cliente->sd);
             break;
@@ -145,6 +164,9 @@ void trata_envia_mensagem(Mensagem *msg, char *str, clienteInfo *cliente)
         case 'e':
             msg->tipo = ENTRAR_SALA;
             break;
+        case 'd':
+            msg->tipo = DELETAR_SALA;
+            break;
         case 's':
             msg->tipo = SAIR_SALA;
             break;
@@ -177,6 +199,9 @@ void trata_recebe_mensagem(Mensagem *msg)
         break;
     case ENTRAR_SALA:
         msg->tipo = ENTRAR_SALA;
+        break;
+    case DELETAR_SALA:
+        msg->tipo = DELETAR_SALA;
         break;
     case SAIR_SALA:
         msg->tipo = SAIR_SALA;

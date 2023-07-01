@@ -82,6 +82,30 @@ void createRoom(int sd, char *roomName)
     write(sd, &msg, sizeof(msg));
 }
 
+void deleteRoom(int sd, char* roomName) {
+    int countSalas = 0;
+    Mensagem msg;
+    msg.tipo = DELETAR_SALA;
+    int salaEncontrada = 0;
+
+    for (int i = 0; i < MAX_SALAS; i++) {
+        if (strcmp(salas[i].nome, roomName) == 0) {
+            salaEncontrada = 1;
+            salas[i].id = -1;
+            strcpy(salas[i].nome, "");
+            break;
+        }
+    }
+
+    if (salaEncontrada) {
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala %s excluída com sucesso!", roomName);
+    } else {
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala %s não encontrada!", roomName);
+    }
+
+    write(sd, &msg, sizeof(msg));
+}
+
 void entra_sala(clienteInfo *cliente, char *roomName)
 {
     int countSalas = 0;
@@ -274,6 +298,9 @@ void trataMensagem(clienteInfo *cliente, Mensagem *msg)
         break;
     case ENTRAR_SALA:
         entra_sala(cliente, msg->mensagem);
+        break;
+    case DELETAR_SALA:
+        deleteRoom(cliente, msg->mensagem);
         break;
     case SAIR_SALA:
         if (sai_sala(cliente, msg->mensagem) == 1) {
