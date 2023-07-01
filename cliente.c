@@ -99,14 +99,14 @@ void showComands(clienteInfo *cliente)
             createRoom(&msg, cliente);
             printf("Cria sala: %sn", msg.mensagem);
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
-            recebe_mensagem(cliente->sd);
+            recebe_mensagem(cliente->sd, cliente);
         }
         else if (strncmp(option, "/e", 2) == 0)
         {
             msg.tipo = ENTRAR_SALA;
             joinRoom(&msg);
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
-            recebe_mensagem(cliente->sd);
+            recebe_mensagem(cliente->sd, cliente);
             break;
         }
         else if (strncmp(option, "/d", 2) == 0)
@@ -114,13 +114,13 @@ void showComands(clienteInfo *cliente)
             msg.tipo = DELETAR_SALA;
             deleteRoom(&msg);
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
-            recebe_mensagem(cliente->sd);
+            recebe_mensagem(cliente->sd, cliente);
         }
         else if (strncmp(option, "/l", 2) == 0)
         {
             msg.tipo = LISTAR_SALAS;
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
-            recebe_mensagem(cliente->sd);
+            recebe_mensagem(cliente->sd, cliente);
         }
         else if (strncmp(option, "/SAIR", 2) == 0)
         {
@@ -131,7 +131,7 @@ void showComands(clienteInfo *cliente)
             printf("Opção inválida.\n");
         }
 
-        if (returnToMenu)
+        if (returnToMenu && cliente->idSala != -1)
         {
             returnToMenu = 0;
             break;
@@ -181,7 +181,7 @@ void processSendMessages(Mensagem *msg, char *str, clienteInfo *cliente)
     }
 }
 
-void processReceiveMessages(Mensagem *msg)
+void processReceiveMessages(Mensagem *msg, clienteInfo *cliente)
 {
     switch (msg->tipo)
     {
@@ -196,6 +196,7 @@ void processReceiveMessages(Mensagem *msg)
         break;
     case SAIR_SALA:
         msg->tipo = SAIR_SALA;
+        cliente->idSala = -1;
         returnToMenu = 1;
         break;
     case LISTAR_SALAS:
@@ -232,7 +233,7 @@ void sendMessages(int sd, clienteInfo *cliente)
     }
 }
 
-void recebe_mensagem(int sd)
+void recebe_mensagem(int sd, clienteInfo *cliente)
 {
     Mensagem bufin;
     memset(&bufin, 0, sizeof(bufin));
@@ -241,7 +242,7 @@ void recebe_mensagem(int sd)
     n = recv(sd, &bufin, sizeof(Mensagem), 0);
     if (n > 0)
     {
-        processReceiveMessages(&bufin);
+        processReceiveMessages(&bufin, cliente);
         printf("\r%s\n", bufin.mensagem);
         limpa_cmd();
     }
@@ -299,6 +300,7 @@ int main(int argc, char *argv[])
     msg.tipo = CADASTRAR_USUARIO;
     strcpy(msg.nome, cliente.nome);
     send(cliente.sd, &msg, sizeof(Mensagem), 0);
+    cliente.idSala = -1;
 
     showComands(&cliente);
     while (1)
@@ -319,7 +321,7 @@ int main(int argc, char *argv[])
         }
         else if (FD_ISSET(cliente.sd, &readfds))
         {
-            recebe_mensagem(cliente.sd);
+            recebe_mensagem(cliente.sd, &cliente);
             if (returnToMenu == 1)
             {
                 showComands(&cliente);
