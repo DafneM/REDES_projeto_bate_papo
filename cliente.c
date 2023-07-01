@@ -63,7 +63,8 @@ void joinRoom(Mensagem *msg)
     replaceN(msg->mensagem);
 }
 
-void deleteRoom (Mensagem *msg){
+void deleteRoom(Mensagem *msg)
+{
     char roomName[30];
 
     printf("Digite o nome da sala que você deseja deletar: ");
@@ -114,7 +115,6 @@ void showComands(clienteInfo *cliente)
             deleteRoom(&msg);
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
             recebe_mensagem(cliente->sd);
-            break;
         }
         else if (strncmp(option, "/l", 2) == 0)
         {
@@ -131,7 +131,8 @@ void showComands(clienteInfo *cliente)
             printf("Opção inválida.\n");
         }
 
-        if (returnToMenu) {
+        if (returnToMenu)
+        {
             returnToMenu = 0;
             break;
         }
@@ -312,14 +313,15 @@ int main(int argc, char *argv[])
             perror("Select falhou!");
             exit(1);
         }
-        if (FD_ISSET(STDIN_FILENO, &readfds))
+        else if (FD_ISSET(STDIN_FILENO, &readfds))
         {
             sendMessages(cliente.sd, &cliente);
         }
-        if (FD_ISSET(cliente.sd, &readfds))
+        else if (FD_ISSET(cliente.sd, &readfds))
         {
             recebe_mensagem(cliente.sd);
-            if(returnToMenu == 1){
+            if (returnToMenu == 1)
+            {
                 showComands(&cliente);
             }
         }
