@@ -36,4 +36,4 @@ typedef struct Mensagem
     char nome[50];
 } Mensagem;
 
-#endif // LIST
+#endif

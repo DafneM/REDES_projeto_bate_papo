@@ -14,7 +14,7 @@
 #define MAX_SIZE 255
 int returnToMenu = 0;
 
-void substitui_n(char *str)
+void replaceN(char *str)
 {
     int len = strlen(str);
     if (len > 0)
@@ -49,10 +49,7 @@ void createRoom(Mensagem *msg, clienteInfo *cliente)
     scanf("%s", roomName);
 
     strcpy(msg->mensagem, roomName);
-    substitui_n(msg->mensagem);
-
-    // envia_mensagem(msg, cliente);
-    // recebe_mensagem(cliente->sd);
+    replaceN(msg->mensagem);
 }
 
 void joinRoom(Mensagem *msg)
@@ -63,27 +60,20 @@ void joinRoom(Mensagem *msg)
     scanf("%s", roomName);
 
     strcpy(msg->mensagem, roomName);
-    substitui_n(msg->mensagem);
+    replaceN(msg->mensagem);
 }
 
-void deletRoom (Mensagem *msg){
+void deleteRoom (Mensagem *msg){
     char roomName[30];
 
     printf("Digite o nome da sala que você deseja deletar: ");
     scanf("%s", roomName);
 
     strcpy(msg->mensagem, roomName);
-    substitui_n(msg->mensagem);
+    replaceN(msg->mensagem);
 }
 
-void exitRoom()
-{
-    Mensagem msg;
-    memset(&msg, 0, sizeof(Mensagem));
-    msg.tipo = SAIR_SALA;
-}
-
-void mostra_comandos(clienteInfo *cliente)
+void showComands(clienteInfo *cliente)
 {
     char option[5];
     Mensagem msg;
@@ -121,7 +111,7 @@ void mostra_comandos(clienteInfo *cliente)
         else if (strncmp(option, "/d", 2) == 0)
         {
             msg.tipo = DELETAR_SALA;
-            deletRoom(&msg);
+            deleteRoom(&msg);
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
             recebe_mensagem(cliente->sd);
             break;
@@ -148,7 +138,7 @@ void mostra_comandos(clienteInfo *cliente)
     }
 }
 
-void trata_envia_mensagem(Mensagem *msg, char *str, clienteInfo *cliente)
+void processSendMessages(Mensagem *msg, char *str, clienteInfo *cliente)
 {
 
     strcpy(msg->nome, cliente->nome);
@@ -186,11 +176,11 @@ void trata_envia_mensagem(Mensagem *msg, char *str, clienteInfo *cliente)
     else
     {
         strcpy(msg->mensagem, str);
-        substitui_n(msg->mensagem);
+        replaceN(msg->mensagem);
     }
 }
 
-void trata_recebe_mensagem(Mensagem *msg)
+void processReceiveMessages(Mensagem *msg)
 {
     switch (msg->tipo)
     {
@@ -219,7 +209,7 @@ void trata_recebe_mensagem(Mensagem *msg)
     limpa_cmd();
 }
 
-void envia_mensagem(int sd, clienteInfo *cliente)
+void sendMessages(int sd, clienteInfo *cliente)
 {
     Mensagem msg;
     char str[MAX_SIZE];
@@ -228,7 +218,7 @@ void envia_mensagem(int sd, clienteInfo *cliente)
 
     limpa_cmd();
     fgets(str, MAX_SIZE, stdin) != NULL;
-    trata_envia_mensagem(&msg, str, cliente);
+    processSendMessages(&msg, str, cliente);
 
     if (strlen(msg.mensagem) == 0)
     {
@@ -250,7 +240,7 @@ void recebe_mensagem(int sd)
     n = recv(sd, &bufin, sizeof(Mensagem), 0);
     if (n > 0)
     {
-        trata_recebe_mensagem(&bufin);
+        processReceiveMessages(&bufin);
         printf("\r%s\n", bufin.mensagem);
         limpa_cmd();
     }
@@ -264,8 +254,6 @@ int main(int argc, char *argv[])
     clienteInfo cliente;
     fd_set readfds;
     Mensagem msg;
-
-    // Trata o sinal de ctrl+c
     signal(SIGINT, trataCtrlC);
 
     if (argc < 3)
@@ -276,7 +264,7 @@ int main(int argc, char *argv[])
 
     printf("Digite seu nome de usuário: ");
     if (fgets(cliente.nome, 50, stdin) != NULL)
-        substitui_n(cliente.nome);
+        replaceN(cliente.nome);
 
     /* configura endereco do servidor */
     serverAddr.sin_family = AF_INET; /* config. socket p. internet*/
@@ -303,7 +291,6 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    // Copie o endereço IP para cliente.ip
     strncpy(cliente.ip, inet_ntoa(clientAddr.sin_addr), sizeof(cliente.ip) - 1);
     printf("Conectado ao servidor %s:%d\n", cliente.ip, ntohs(clientAddr.sin_port));
     printf("Bem vindo %s!\n", cliente.nome);
@@ -312,7 +299,7 @@ int main(int argc, char *argv[])
     strcpy(msg.nome, cliente.nome);
     send(cliente.sd, &msg, sizeof(Mensagem), 0);
 
-    mostra_comandos(&cliente);
+    showComands(&cliente);
     while (1)
     {
         FD_ZERO(&readfds);
@@ -327,13 +314,13 @@ int main(int argc, char *argv[])
         }
         if (FD_ISSET(STDIN_FILENO, &readfds))
         {
-            envia_mensagem(cliente.sd, &cliente);
+            sendMessages(cliente.sd, &cliente);
         }
         if (FD_ISSET(cliente.sd, &readfds))
         {
             recebe_mensagem(cliente.sd);
             if(returnToMenu == 1){
-                mostra_comandos(&cliente);
+                showComands(&cliente);
             }
         }
     }

@@ -14,15 +14,13 @@
 #define MAX_CLIENTS 10
 #define MAX_MESSAGE_LENGTH 256
 #define MAX_SALAS 10
-// Global variables
 clienteInfo clientes[MAX_CLIENTS];
 salaInfo salas[MAX_SALAS];
-// int clients[MAX_CLIENTS];
 char messages[MAX_CLIENTS][MAX_MESSAGE_LENGTH];
 fd_set readfds;
 int maxfd;
 
-void substitui_n(char *str)
+void replaceN(char *str)
 {
     int len = strlen(str);
     if (len > 0)
@@ -82,31 +80,33 @@ void createRoom(int sd, char *roomName)
     write(sd, &msg, sizeof(msg));
 }
 
-void deleteRoom(int sd, char* roomName) {
-    int countSalas = 0;
+int deleteRoom(int sd, char *roomName) {
     Mensagem msg;
     msg.tipo = DELETAR_SALA;
-    int salaEncontrada = 0;
+    int roomFound = 0;
 
     for (int i = 0; i < MAX_SALAS; i++) {
         if (strcmp(salas[i].nome, roomName) == 0) {
-            salaEncontrada = 1;
+            roomFound = 1;
             salas[i].id = -1;
-            strcpy(salas[i].nome, "");
+            salas[i].nome[0] = '\0';
             break;
         }
     }
 
-    if (salaEncontrada) {
-        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala %s excluída com sucesso!", roomName);
+    if (!roomFound) {
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala \"%s\" não encontrada, não é possível excluí-la.", roomName);
+        return 1;
     } else {
-        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala %s não encontrada!", roomName);
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala \"%s\" excluída com sucesso!", roomName);
+        return 1;
     }
 
     write(sd, &msg, sizeof(msg));
+    return 0;
 }
 
-void entra_sala(clienteInfo *cliente, char *roomName)
+void joinRoom(clienteInfo *cliente, char *roomName)
 {
     int countSalas = 0;
     Mensagem msg;
@@ -149,7 +149,7 @@ void entra_sala(clienteInfo *cliente, char *roomName)
     write(cliente->sd, &msg, sizeof(msg));
 }
 
-int sai_sala(clienteInfo *cliente, char *roomName)
+int leaveRoom(clienteInfo *cliente, char *roomName)
 {
     Mensagem msg;
     memset(&msg, 0, sizeof(Mensagem));
@@ -168,12 +168,10 @@ int sai_sala(clienteInfo *cliente, char *roomName)
         snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Você saiu da sala!");
         write(cliente->sd, &msg, sizeof(msg));
         return 1;
-    // }
 
     return 0;
 }
 
-// Function to initialize the client array
 void initClients()
 {
 
@@ -195,7 +193,7 @@ void initSalas()
         strcpy(salas[i].nome, "");
     }
 }
-// Function to add a client to the chatroom
+
 int addClient(int sd)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
@@ -215,7 +213,6 @@ int addClient(int sd)
     return 0;
 }
 
-// Function to remove a client from the chatroom
 void removeClient(int clientfd)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
@@ -228,7 +225,6 @@ void removeClient(int clientfd)
     }
 }
 
-// Function to broadcast a message to all connected clients
 void broadcastMessage(Mensagem *msg, clienteInfo *sender)
 {
     char new_message[MAX_MESSAGE_LENGTH] = {0};
@@ -248,7 +244,7 @@ void broadcastMessage(Mensagem *msg, clienteInfo *sender)
         }
     }
 }
-void cadastrar_usuario(int sd, char *nome)
+void registerUser(int sd, char *nome)
 {
     struct sockaddr_in clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
@@ -264,11 +260,10 @@ void cadastrar_usuario(int sd, char *nome)
             break;
         }
     }
-    // listar_clientes();
 }
 
 
-void listar_usuarios(clienteInfo *cliente)
+void listUsers(clienteInfo *cliente)
 {
     printf("Listando usuários...\n");
     Mensagem msg;
@@ -282,12 +277,12 @@ void listar_usuarios(clienteInfo *cliente)
             strcat(msg.mensagem, "\n");
         }
     }
-    substitui_n(msg.mensagem);
+    replaceN(msg.mensagem);
 
     write(cliente->sd, &msg, sizeof(msg));
 }
 
-void trataMensagem(clienteInfo *cliente, Mensagem *msg)
+void processMessages(clienteInfo *cliente, Mensagem *msg)
 {
     printf("Tratando mensagem...\n");
     printf("Tipo: %d\n", msg->tipo);
@@ -297,26 +292,28 @@ void trataMensagem(clienteInfo *cliente, Mensagem *msg)
         createRoom(cliente->sd, msg->mensagem);
         break;
     case ENTRAR_SALA:
-        entra_sala(cliente, msg->mensagem);
+        joinRoom(cliente, msg->mensagem);
         break;
     case DELETAR_SALA:
-        deleteRoom(cliente, msg->mensagem);
+        if (deleteRoom(cliente, msg->mensagem) == 1) {
+            return;
+        }
         break;
     case SAIR_SALA:
-        if (sai_sala(cliente, msg->mensagem) == 1) {
-            return;  // Retorna para o loop de opções
+        if (leaveRoom(cliente, msg->mensagem) == 1) {
+            return;
         }
         break;
     case LISTAR_SALAS:
-        listar_salas(cliente->sd);
+        listRooms(cliente->sd);
         break;
     case LISTAR_USUARIOS:
-        listar_usuarios(cliente);
+        listUsers(cliente);
         break;
     case SAIR:
         break;
     case CADASTRAR_USUARIO:
-        cadastrar_usuario(cliente->sd, msg->nome);
+        registerUser(cliente->sd, msg->nome);
         break;
     default:
         broadcastMessage(msg, cliente);
@@ -324,7 +321,7 @@ void trataMensagem(clienteInfo *cliente, Mensagem *msg)
     }
 }
 
-void listar_salas(int cliente_sd)
+void listRooms(int cliente_sd)
 {
     printf("Listando Salas...\n");
     Mensagem msg;
@@ -339,12 +336,12 @@ void listar_salas(int cliente_sd)
             strcat(msg.mensagem, "\n");
         }
     }
-    substitui_n(msg.mensagem);
+    replaceN(msg.mensagem);
     printf("Mensagem: %s\n", msg.mensagem);
     write(cliente_sd, &msg, sizeof(msg));
 }
 
-void trataCtrlC(int sig)
+void handleCtrlC(int sig)
 {
     printf("\nRecebido o sinal SIGINT (Ctrl+C)\n");
     exit(0);
@@ -358,9 +355,7 @@ int main()
     int activity, i, valread;
     Mensagem msg;
 
-    // Trata o sinal de ctrl+c
-    signal(SIGINT, trataCtrlC);
-    // Create a socket for the server
+    signal(SIGINT, handleCtrlC);
     serverfd = socket(AF_INET, SOCK_STREAM, 0);
     if (serverfd == -1)
     {
@@ -368,7 +363,6 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    // Set socket options
     int opt = 1;
     if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
     {
@@ -376,19 +370,16 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    // Configure server address
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(8080);
 
-    // Bind the socket to the specified address and port
     if (bind(serverfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1)
     {
         perror("Bind failed");
         exit(EXIT_FAILURE);
     }
 
-    // Listen for incoming connections
     if (listen(serverfd, MAX_CLIENTS) == -1)
     {
         perror("Listen failed");
@@ -399,7 +390,7 @@ int main()
     initSalas();
     maxfd = serverfd;
 
-    printf("Chatroom server started. Waiting for connections...\n");
+    printf("Servidor de sala de bate-papo iniciado. Aguardando conexões...\n");
 
     while (1)
     {
@@ -425,7 +416,6 @@ int main()
 
         if (FD_ISSET(serverfd, &readfds))
         {
-            // New connection request
             newclientfd = accept(serverfd, (struct sockaddr *)&clientAddr, &addrLen);
             if (newclientfd == -1)
             {
@@ -434,15 +424,14 @@ int main()
             }
             char teste[16];
 
-            // Add the new client to the chatroom
             if (addClient(newclientfd) == 0)
             {
-                printf("Chatroom is full. Connection rejected.\n");
+                printf("A sala de bate-papo está cheia. Conexão rejeitada.\n");
                 close(newclientfd);
             }
             else
             {
-                printf("New client connected. Socket fd is %d\n", newclientfd);
+                printf("Novo cliente conectado. O descritor de socket é %d\n", newclientfd);
             }
         }
 
@@ -452,26 +441,21 @@ int main()
 
             if (clientfd != -1 && FD_ISSET(clientfd, &readfds))
             {
-                // Client activity
                 FD_CLR(clientfd, &readfds);
                 int valread = read(clientfd, &msg, sizeof(Mensagem));
                 printf("%s\n", msg.mensagem);
 
                 if (valread == 0)
                 {
-                    // Client disconnected
                     getpeername(clientfd, (struct sockaddr *)&clientAddr, &addrLen);
-                    printf("Client disconnected. IP address: %s, Port: %d\n",
-                           inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
-
-                    // Remove the client from the chatroom
+                    printf("Cliente desconectado. Endereço IP: %s, Porta: %d\n",
+                        inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
                     removeClient(clientfd);
                     close(clientfd);
                 }
                 else
                 {
-                    // Processa messagem
-                    trataMensagem(&clientes[i], &msg);
+                    processMessages(&clientes[i], &msg);
                 }
             }
         }
