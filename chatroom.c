@@ -42,7 +42,7 @@ void createRoom(int sd, char *roomName)
     Mensagem msg;
     msg.tipo = CRIAR_SALA;
     int nomeExiste = 0;
-
+    printf("Criando sala %s\n", roomName);
     for (int i = 0; i < MAX_SALAS; i++)
     {
         if (strcmp(salas[i].nome, roomName) == 0)
@@ -85,40 +85,45 @@ int deleteRoom(int sd, char *roomName)
     Mensagem msg;
     msg.tipo = DELETAR_SALA;
     int roomFound = 0;
-
+    int roomEmpty = 0;
+    printf("Excluindo sala %s\n", roomName);
     for (int i = 0; i < MAX_SALAS; i++)
     {
+
         if (strcmp(salas[i].nome, roomName) == 0)
         {
             roomFound = 1;
             salas[i].id = -1;
             salas[i].nome[0] = '\0';
+            if (salas[i].qtdClientes == 0)
+                roomEmpty = 1;
             break;
         }
     }
 
-    if (!roomFound)
+    if (!roomEmpty)
+    {
+        snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala \"%s\" não pode ser excluída pois ainda há clientes nela.", roomName);
+    }
+    else if (!roomFound)
     {
         snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala \"%s\" não encontrada, não é possível excluí-la.", roomName);
-        // return 1;
     }
     else
     {
         snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Sala \"%s\" excluída com sucesso!", roomName);
-        // return 1;
     }
 
     write(sd, &msg, sizeof(msg));
     return 0;
 }
-
 void joinRoom(clienteInfo *cliente, char *roomName)
 {
     int countSalas = 0;
     Mensagem msg;
     msg.tipo = ENTRAR_SALA;
     int indiceSala = -1, indiceCliente = -1;
-
+    printf("@%s entrando na sala %s\n", cliente->nome, roomName);
     for (int i = 0; i < MAX_SALAS; i++)
     {
         if (strcmp(salas[i].nome, roomName) == 0)
@@ -137,7 +142,6 @@ void joinRoom(clienteInfo *cliente, char *roomName)
         }
     }
 
-    printf("%s", cliente);
     if (indiceSala != -1 && salas[indiceSala].qtdClientes < MAX_CLIENTS)
     {
         salas[indiceSala].qtdClientes++;
@@ -162,6 +166,8 @@ int leaveRoom(clienteInfo *cliente, char *roomName)
     int indiceCliente;
     int indiceSala = clientes[indiceCliente].idSala;
 
+    printf("@%s saindo da sala %s\n", cliente->nome, roomName);
+
     msg.tipo = SAIR_SALA;
 
     for (int i = 0; i < MAX_CLIENTS; i++)
@@ -176,8 +182,6 @@ int leaveRoom(clienteInfo *cliente, char *roomName)
     snprintf(msg.mensagem, MAX_MESSAGE_LENGTH, "Você saiu da sala!");
     write(cliente->sd, &msg, sizeof(msg));
     return 1;
-
-    return 0;
 }
 
 void initClients()
@@ -227,7 +231,11 @@ void removeClient(int clientfd)
     {
         if (clientes[i].sd == clientfd)
         {
+            salas[clientes[i].idSala].qtdClientes--;
+            clientes[i].idSala = -1;
             clientes[i].sd = -1;
+            strcpy(clientes[i].nome, "");
+            clientes[i].ip[0] = '\0';
             break;
         }
     }
@@ -291,8 +299,6 @@ void listUsers(clienteInfo *cliente)
 
 void processMessages(clienteInfo *cliente, Mensagem *msg)
 {
-    printf("Tratando mensagem...\n");
-    printf("Tipo: %d\n", msg->tipo);
     switch (msg->tipo)
     {
     case CRIAR_SALA:
@@ -338,7 +344,6 @@ void listRooms(int cliente_sd)
     msg.tipo = LISTAR_SALAS;
     for (int i = 0; i < MAX_SALAS; i++)
     {
-        printf("Sala %d: %s\n", salas[i].id, salas[i].nome);
         if (salas[i].id != -1)
         {
             strcat(msg.mensagem, salas[i].nome);
@@ -346,13 +351,12 @@ void listRooms(int cliente_sd)
         }
     }
     replaceN(msg.mensagem);
-    printf("Mensagem: %s\n", msg.mensagem);
     write(cliente_sd, &msg, sizeof(msg));
 }
 
 void handleCtrlC(int sig)
 {
-    printf("\nRecebido o sinal SIGINT (Ctrl+C)\n");
+    printf("\nFinalizando Servidor(Ctrl+C)\n");
     exit(0);
 }
 
@@ -452,7 +456,6 @@ int main()
             {
                 FD_CLR(clientfd, &readfds);
                 int valread = read(clientfd, &msg, sizeof(Mensagem));
-                printf("%s\n", msg.mensagem);
 
                 if (valread == 0)
                 {

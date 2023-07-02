@@ -13,6 +13,8 @@
 
 #define MAX_SIZE 255
 int returnToMenu = 0;
+int sdCliente = -1;
+int flagSala = 0;
 
 void replaceN(char *str)
 {
@@ -38,7 +40,25 @@ void limpa_cmd()
 
 void trataCtrlC(int sig)
 {
-    printf("\nRecebido o sinal SIGINT (Ctrl+C)\n");
+    Mensagem msg;
+    int n = -1;
+    msg.tipo = SAIR_SALA;
+    if (sdCliente != -1)
+    {
+        if (flagSala)
+        {
+            printf("\nSaindo da sala...\n");
+            send(sdCliente, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
+            n = recv(sdCliente, &msg, sizeof(Mensagem), 0);
+        }
+        if (n > 0)
+        {
+            printf("\r%s\n", msg.mensagem);
+            limpa_cmd();
+        }
+    }
+    close(sdCliente);
+    printf("\nFinalizando conexão com o servidor(Ctrl+C)\n");
     exit(0);
 }
 void createRoom(Mensagem *msg, clienteInfo *cliente)
@@ -74,6 +94,23 @@ void deleteRoom(Mensagem *msg)
     replaceN(msg->mensagem);
 }
 
+void helpMenu()
+{
+    printf("\n----- Ajuda -------\n");
+    printf("Comandos fora da sala:\n");
+    printf("/c - Criar sala\n");
+    printf("/d - Deletar sala\n");
+    printf("/e - Entrar em uma sala\n");
+    printf("/l - Listar salas\n");
+    printf("/SAIR - Fechar\n");
+    printf("\nComandos dentro da sala:\n");
+    printf("/l - Listar salas\n");
+    printf("/u - Listar usuários na sua sala\n");
+    printf("/h - Ajuda\n");
+    printf("/s - Sair da sala\n");
+    printf("---------------------\n");
+}
+
 void showComands(clienteInfo *cliente)
 {
     char option[5];
@@ -88,11 +125,11 @@ void showComands(clienteInfo *cliente)
         printf("/d - Deletar sala\n");
         printf("/e - Entrar em uma sala\n");
         printf("/l - Listar salas\n");
-        printf("/EXIT - Fechar\n");
+        printf("/h - Ajuda\n");
+        printf("/SAIR - Fechar\n");
         printf("Opção: ");
         scanf("%s", option);
         printf("\n");
-        printf("Opção escolhida: %s\n", option);
         if (strncmp(option, "/c", 2) == 0)
         {
             msg.tipo = CRIAR_SALA;
@@ -107,6 +144,7 @@ void showComands(clienteInfo *cliente)
             joinRoom(&msg);
             send(cliente->sd, &msg, sizeof(Mensagem), 0); /* enviando dados ...  */
             recebe_mensagem(cliente->sd, cliente);
+            flagSala = 1;
             break;
         }
         else if (strncmp(option, "/d", 2) == 0)
@@ -124,7 +162,12 @@ void showComands(clienteInfo *cliente)
         }
         else if (strncmp(option, "/SAIR", 2) == 0)
         {
+            trataCtrlC(SIGINT);
             break;
+        }
+        else if (strncmp(option, "/h", 2) == 0)
+        {
+            helpMenu();
         }
         else
         {
@@ -149,17 +192,17 @@ void processSendMessages(Mensagem *msg, char *str, clienteInfo *cliente)
         switch (str[1])
         {
         case 'c':
-            msg->tipo = CRIAR_SALA;
-            createRoom(msg, cliente);
+            printf("Não é possível criar sala dentro de uma sala. Volte ao menu!\n");
             break;
         case 'e':
-            msg->tipo = ENTRAR_SALA;
+            printf("Não é possível entrar em uma sala dentro de uma sala. Volte ao menu!\n");
             break;
         case 'd':
-            msg->tipo = DELETAR_SALA;
+            printf("Não é possível deletar sala dentro de uma sala. Volte ao menu!\n");
             break;
         case 's':
             msg->tipo = SAIR_SALA;
+            flagSala = 0;
             break;
         case 'l':
             msg->tipo = LISTAR_SALAS;
@@ -168,6 +211,7 @@ void processSendMessages(Mensagem *msg, char *str, clienteInfo *cliente)
             msg->tipo = LISTAR_USUARIOS;
             break;
         case 'h':
+            helpMenu();
             break;
         default:
             printf("Comando inválido.\n");
@@ -274,6 +318,7 @@ int main(int argc, char *argv[])
     serverAddr.sin_port = htons(atoi(argv[2]));
 
     cliente.sd = socket(AF_INET, SOCK_STREAM, 0);
+    sdCliente = cliente.sd;
     if (cliente.sd < 0)
     {
         fprintf(stderr, "Criacao do socket falhou!\n");
